@@ -1,11 +1,10 @@
+from typing import List
+
 from pydantic import BaseModel
 
 
-class ChatbotQueryInput(BaseModel):
-    text: str
+class ProcessInput(BaseModel):
+    data: str | List[List[str]]
 
-
-class ChatbotQueryOutput(BaseModel):
-    input: str
-    output: str
-    intermediate_steps: list[str]
+    class Config:
+        arbitrary_types_allowed = True

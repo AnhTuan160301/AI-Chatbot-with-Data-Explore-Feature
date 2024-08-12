@@ -1,19 +1,23 @@
+import csv
 import os
 import random
 import time
 
 import dotenv
+import requests
 import streamlit as st
 from langchain.agents import initialize_agent
 from langchain.llms.ai21 import AI21
 from langchain.memory import ConversationBufferWindowMemory
 from langchain.schema import SystemMessage
-from langchain_experimental.agents.agent_toolkits import create_csv_agent
-import requests
-from chatbot_api.src.utils.pdf_processing import get_pdf_text
+
+from chatbot_api.src.agents.agents import tools
+from chatbot_api.src.utils.csv_agents import csv_agent
+from chatbot_api.src.utils.pdf_processing import get_pdf_text, retriever
 
 
 def show_chatbot_page():
+    global agent1, agent
     dotenv.load_dotenv()
     HUGGINGFACE_KEY = os.getenv("HUGGINGFACEHUB_API_TOKEN")
     AI21_API_KEY = os.getenv("AI21_LLM_key")
@@ -324,10 +328,10 @@ Overall, Assistant is a powerful system that can help with a wide range of tasks
 
     if user_csv is not None:
 
-        agent1 = create_csv_agent(llm, user_csv, agent='zero-shot-react-description', handle_parsing_errors=True,
-                                  verbose=True)
-
+        response = requests.post(url=CHATBOT_URL + "/process_csvs/")
         st.sidebar.subheader("Ask a Question ❓")
+        if response.json()["message"] == "success":
+            agent1 = csv_agent
         prompt = st.sidebar.text_input("Enter your question about the file")
         ask_button = st.sidebar.button("Send 🚀")
 
@@ -344,10 +348,10 @@ Overall, Assistant is a powerful system that can help with a wide range of tasks
         st.session_state.conversation = None
     if user_pdf is not None:
         with st.spinner("Analyzing the PDF... 🔄"):
-            payload = {"docs": get_pdf_text(user_pdf)}
-            response = requests.post(url=CHATBOT_URL + "/process_pdfs/", data=payload)
-            print(response)
-            st.session_state.conversation = globals()["chain"]
+            payload = {"data": get_pdf_text(user_pdf)}
+            response = requests.post(url=CHATBOT_URL + "/process_pdfs", data=payload)
+            if response.json()["message"] == "success":
+                st.session_state.conversation = retriever
         st.sidebar.subheader("Ask a Question ❓")
         prompt = st.sidebar.text_input("Enter your question about the file")
         ask_button = st.sidebar.button("Send 🚀")
