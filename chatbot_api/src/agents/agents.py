@@ -10,8 +10,8 @@ from langchain_experimental.utilities import PythonREPL
 
 dotenv.load_dotenv()
 
-ai21_key = os.getenv("ai21_LLM_key")
-llm = AI21(ai21_api_key='', temperature=0.1, verbose=False)
+ai21_key = os.getenv("AI21_LLM_key")
+llm = AI21(ai21_api_key=ai21_key, temperature=0.1, verbose=False)
 
 datetime_tool = Tool(
     name="Datetime",

@@ -8,3 +8,6 @@ pyttsx3==2.90
 PyPDF2==3.0.1
 datetime==5.1
 pdfplumber~=0.11.3
+dotenv~=0.0.5
+fastapi~=0.112.0
+requests~=2.31.0
