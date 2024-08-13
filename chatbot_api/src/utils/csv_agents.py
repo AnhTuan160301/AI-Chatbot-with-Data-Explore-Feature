@@ -11,7 +11,7 @@ llm = AI21(ai21_api_key=AI21_API_KEY, temperature=0.1, verbose=False)
 csv_agent = None
 
 
-async def load_csv_agent(csv_file):
+async def load_csv_agent(csv_file_path):
     global csv_agent
-    csv_agent = create_csv_agent(llm, csv_file, agent='zero-shot-react-description', handle_parsing_errors=True,
+    csv_agent = create_csv_agent(llm, csv_file_path, agent='zero-shot-react-description', handle_parsing_errors=True,
                                  verbose=True)

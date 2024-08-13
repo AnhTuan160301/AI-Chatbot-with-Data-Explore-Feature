@@ -21,9 +21,8 @@ def show_chatbot_page():
     dotenv.load_dotenv()
     HUGGINGFACE_KEY = os.getenv("HUGGINGFACEHUB_API_TOKEN")
     AI21_API_KEY = os.getenv("AI21_LLM_key")
-    CHATBOT_URL = os.getenv("CHATBOT_URL", "http://localhost:8000")
-    docs_pdf = None
-    docs_csv = None
+    CHATBOT_URL = "http://localhost:8000"
+    FILE_STORAGE_DIR = os.getenv("FILES_STORAGE_DIR")
     PREFIX = """Answer the following questions as best you can only using the following tools:
  Calculator: Useful for when you need to answer questions about math and arithmetics.
  python_repl: Useful when you need to execute python commands.
@@ -327,10 +326,13 @@ Overall, Assistant is a powerful system that can help with a wide range of tasks
     user_csv = st.sidebar.file_uploader("Upload your CSV file 📂", type="csv")
 
     if user_csv is not None:
-
-        response = requests.post(url=CHATBOT_URL + "/process_csvs/")
+        file_path = os.path.join(FILE_STORAGE_DIR, user_csv.name)
+        with open(file_path, "wb") as f:
+            f.write(user_csv.getbuffer())
+        payload = {'data': file_path}
+        response_pdf = requests.post(url=CHATBOT_URL + "/process_csvs", json=payload)
         st.sidebar.subheader("Ask a Question ❓")
-        if response.json()["message"] == "success":
+        if response_pdf.status_code == 200:
             agent1 = csv_agent
         prompt = st.sidebar.text_input("Enter your question about the file")
         ask_button = st.sidebar.button("Send 🚀")
@@ -348,9 +350,10 @@ Overall, Assistant is a powerful system that can help with a wide range of tasks
         st.session_state.conversation = None
     if user_pdf is not None:
         with st.spinner("Analyzing the PDF... 🔄"):
-            payload = {"data": get_pdf_text(user_pdf)}
-            response = requests.post(url=CHATBOT_URL + "/process_pdfs", data=payload)
-            if response.json()["message"] == "success":
+            pdf_data = get_pdf_text(user_pdf)
+            payload = {'data': pdf_data}
+            response_csv = requests.post(url=CHATBOT_URL + "/process_pdf", json=payload)
+            if response_csv.status_code == 200:
                 st.session_state.conversation = retriever
         st.sidebar.subheader("Ask a Question ❓")
         prompt = st.sidebar.text_input("Enter your question about the file")

@@ -19,7 +19,7 @@ async def get_status():
     return {"status": "running"}
 
 
-@app.post("/process_pdfs")
+@app.post("/process_pdf")
 async def process_pdfs(processInput: ProcessInput) -> Any:
     try:
         await process_pdf(processInput.data)
