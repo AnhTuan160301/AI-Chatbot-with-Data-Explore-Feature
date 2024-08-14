@@ -1,63 +1,24 @@
-import csv
 import os
 import random
 import time
 
 import dotenv
+import matplotlib.pyplot as plt
+import pandas as pd
+import pdfplumber
 import requests
 import streamlit as st
-from langchain.agents import initialize_agent
-from langchain.llms.ai21 import AI21
-from langchain.memory import ConversationBufferWindowMemory
-from langchain.schema import SystemMessage
 
-from chatbot_api.src.agents.agents import tools
-from chatbot_api.src.utils.csv_agents import csv_agent
-from chatbot_api.src.utils.pdf_processing import get_pdf_text, retriever
+from response_process import extract_code_from_response
 
 
 def show_chatbot_page():
-    global agent1, agent
     dotenv.load_dotenv()
-    HUGGINGFACE_KEY = os.getenv("HUGGINGFACEHUB_API_TOKEN")
-    AI21_API_KEY = os.getenv("AI21_LLM_key")
-    CHATBOT_URL = "http://localhost:8000"
+    CHATBOT_URL = os.getenv("CHATBOT_URL", "http://localhost:8000")
     FILE_STORAGE_DIR = os.getenv("FILES_STORAGE_DIR")
-    PREFIX = """Answer the following questions as best you can only using the following tools:
- Calculator: Useful for when you need to answer questions about math and arithmetics.
- python_repl: Useful when you need to execute python commands.
- duckduckgo: Useful for when you need to search the internet for something another tool cannot find.
- Datetime:useful to return the current datetime 
- """
-    FORMAT_INSTRUCTIONS = """Use the following format:
-
- Question: the input question you must answer
- Thought: you should always think about what to do. Always use a tool
- Action: the action to take, should be one of [{tool_names}]
- Action Input: the input to the action
- Observation: the result of the action 
- ... (this Thought/Action/Action Input/Observation can repeat N time)
- Thought: I now know the final answer
- Final Answer: the final answer to the original input question
-
- If you can't find the answer, you will respond as follows: Final Answer: Sorry 😔, I don't know the answer. I will do my best next time!
-
- """
-    SUFFIX = """Begin! Remmember to give the observation as a final answer:
-
- Question: {input}
- Thought:{agent_scratchpad}"""
-    sys_msg = """Assistant is a large language model trained by AI21 Studio.
-
-Assistant is designed to be able to assist with a wide range of tasks, from answering simple questions to providing in-depth explanations and discussions on a wide range of topics. As a language model, Assistant is able to generate human-like text based on the input it receives, allowing it to engage in natural-sounding conversations and provide responses that are coherent and relevant to the topic at hand.
-
-Assistant is constantly learning and improving, and its capabilities are constantly evolving. It is able to process and understand large amounts of text, and can use this knowledge to provide accurate and informative responses to a wide range of questions. Additionally, Assistant is able to generate its own text based on the input it receives, allowing it to engage in discussions and provide explanations and descriptions on a wide range of topics.
-
-Unfortunately, Assistant is very terrible at maths . When provided with any questions, no matter how simple, assistant always refers to it's trusty tools and absolutely does NOT try to answer questions by itself
-
-Overall, Assistant is a powerful system that can help with a wide range of tasks and provide valuable insights and information on a wide range of topics. Whether you need help with a specific question or just want to have a conversation about a particular topic, Assistant is here to assist.
-"""
-
+    YOUR_FULL_PATH = os.getenv("FULL_PATH_DIR")
+    if not os.path.exists(YOUR_FULL_PATH):
+        os.mkdir(YOUR_FULL_PATH)
     contexts = [
         [
             "Give me a joke",
@@ -132,36 +93,13 @@ Overall, Assistant is a powerful system that can help with a wide range of tasks
         p2 = st.session_state['p2']
         p3 = st.session_state['p3']
         p4 = st.session_state['p4']
-    system_message = SystemMessage(
-        content=sys_msg
-    )
-    agent_kwargs = {
-        "system_message ": system_message
-    }
 
-    llm = AI21(ai21_api_key=AI21_API_KEY, temperature=0.1, verbose=False)
-    memory = ConversationBufferWindowMemory(
-        memory_key='chat_history',
-        k=5,
-        return_messages=True,
-        verbose=True,
-    )
-    if 'agent' not in st.session_state:
-        agent = initialize_agent(
-            llm=llm,
-            agent='conversational-react-description',
-            prefix=PREFIX,
-            suffix=SUFFIX,
-            format_instructions=FORMAT_INSTRUCTIONS,
-            tools=tools,
-            max_iteration=10,
-            handle_parsing_errors=True,
-            verbose=True,
-            agent_kwargs=agent_kwargs,
-            memory=memory,
-            early_stopping_method="generate",
-        )
-        st.session_state.agent = agent
+    def get_pdf_text(pdf):
+        with pdfplumber.open(pdf) as pdf_file:
+            text = ""
+            for page in pdf_file.pages:
+                text += page.extract_text()
+        return text
 
     def type_effect(response):
         if response:
@@ -271,11 +209,11 @@ Overall, Assistant is a powerful system that can help with a wide range of tasks
 
         st.session_state.messages.append({'role': 'user', 'content': str(prompt)})
 
-        response = f'Echo {prompt}'
-        response += ":hushed:"
-        response = st.session_state.agent.run(prompt)
+        data = {"user_message": prompt}
+        response_dict = requests.post(url=CHATBOT_URL + "/chat", json=data)
         substrings_to_remove = ['AI:']
         for substring in substrings_to_remove:
+            response = response_dict.json()["output"]
             response = response.replace(substring, '')
         with st.spinner("Thinking...Please wait..."):
             time.sleep(1.9)
@@ -304,10 +242,11 @@ Overall, Assistant is a powerful system that can help with a wide range of tasks
         else:
             with st.spinner("Thinking...Please wait..."):
                 time.sleep(1.9)
-            regenerated_response = st.session_state.agent.run(input=last_user_input)
+            data = {"user_message": last_user_input}
+            regenerate_response_dict = requests.post(url=CHATBOT_URL + "/chat", json=data)
             substrings_to_remove = ['AI:']
             for substring in substrings_to_remove:
-                regenerated_response = regenerated_response.replace(substring, '')
+                regenerated_response = regenerate_response_dict.json()["output"].replace(substring, '')
             del st.session_state.messages[-1]
             with st.chat_message("assistant"):
                 segments = regenerated_response.split("```")
@@ -326,23 +265,38 @@ Overall, Assistant is a powerful system that can help with a wide range of tasks
     user_csv = st.sidebar.file_uploader("Upload your CSV file 📂", type="csv")
 
     if user_csv is not None:
-        file_path = os.path.join(FILE_STORAGE_DIR, user_csv.name)
+        file_path = os.path.join(YOUR_FULL_PATH, user_csv.name)
         with open(file_path, "wb") as f:
             f.write(user_csv.getbuffer())
-        payload = {'data': file_path}
-        response_pdf = requests.post(url=CHATBOT_URL + "/process_csvs", json=payload)
+
+        df = pd.read_csv(file_path)
         st.sidebar.subheader("Ask a Question ❓")
-        if response_pdf.status_code == 200:
-            agent1 = csv_agent
-        prompt = st.sidebar.text_input("Enter your question about the file")
-        ask_button = st.sidebar.button("Send 🚀")
+        prompt = st.sidebar.text_input("Enter your question about the file", key="csv_prompt")
+        ask_button = st.sidebar.button("Send 🚀", key="csv")
 
         if ask_button:
             if prompt:
                 with st.spinner("Analyzing... 🔄"):
-                    output = agent1.run(prompt)
-                st.subheader("Assistant's Response 🤖")
-                st.info(output)
+                    data = {"data": file_path, "user_message": prompt}
+                    response = requests.post(url=CHATBOT_URL + "/process_csvs", json=data)
+                    st.subheader("Assistant's Response 🤖")
+                    if response.status_code == 200:
+                        code_to_execute = extract_code_from_response(response.json()["output"])
+
+                        if code_to_execute:
+                            try:
+                                # Making df available for execution in the context
+                                exec(code_to_execute, globals(), {"df": df, "plt": plt})
+                                fig = plt.gcf()  # Get current figure
+                                st.plotly_chart(fig)  # Display using Streamlit
+                            except Exception as e:
+                                st.write(f"Error executing code: {e}")
+                        else:
+                            st.info(response.json()["output"])
+                    else:
+                        output_text = """An error occurred while processing your message.
+                                    Please try again or rephrase your message."""
+                        st.info(output_text)
 
     st.sidebar.title("PDF Document Queries 📑")
     user_pdf = st.sidebar.file_uploader("Upload your PDF files 📂", type="pdf")
@@ -351,20 +305,22 @@ Overall, Assistant is a powerful system that can help with a wide range of tasks
     if user_pdf is not None:
         with st.spinner("Analyzing the PDF... 🔄"):
             pdf_data = get_pdf_text(user_pdf)
-            payload = {'data': pdf_data}
-            response_csv = requests.post(url=CHATBOT_URL + "/process_pdf", json=payload)
-            if response_csv.status_code == 200:
-                st.session_state.conversation = retriever
         st.sidebar.subheader("Ask a Question ❓")
-        prompt = st.sidebar.text_input("Enter your question about the file")
-        ask_button = st.sidebar.button("Send 🚀")
+        prompt = st.sidebar.text_input("Enter your question about the file", key="pdf_prompt")
+        ask_button = st.sidebar.button("Send 🚀", key="pdf")
         if ask_button:
             if prompt:
                 with st.spinner("Analyzing... 🔄"):
-                    output = st.session_state.conversation(prompt)
-                st.subheader("Assistant's Response 🤖")
-                answer = output.get('answer')
-                st.info(answer)
+                    data = {"data": pdf_data, "user_message": prompt}
+                    response = requests.post(url=CHATBOT_URL + "/process_pdf", json=data)
+                    st.subheader("Assistant's Response 🤖")
+                    if response.status_code == 200:
+                        answer = response.json()["output"]
+                        st.info(answer)
+                    else:
+                        output_text = """An error occurred while processing your message.
+                                    Please try again or rephrase your message."""
+                        st.info(output_text)
 
 
 if __name__ == "__main__":

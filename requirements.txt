@@ -11,3 +11,5 @@ pdfplumber~=0.11.3
 dotenv~=0.0.5
 fastapi~=0.112.0
 requests~=2.31.0
+pandas~=2.2.2
+matplotlib~=3.9.2

@@ -2,7 +2,14 @@ from pydantic import BaseModel
 
 
 class ProcessInput(BaseModel):
-    data: str
+    data: str | None
+    user_message: str
 
-    class Config:
-        arbitrary_types_allowed = True
+
+class QueryInput(BaseModel):
+    user_message: str
+
+
+class ProcessOutput(BaseModel):
+    input: str
+    output: str

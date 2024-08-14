@@ -41,7 +41,7 @@ def get_vectorstore(chunks):
 
 def create_chain(retriever):
     memory = ConversationBufferMemory(
-        memory_key='chat_history', return_messages=False)
+        memory_key='chat_history', return_messages=True)
     conversation_chain = ConversationalRetrievalChain.from_llm(
         llm=llm,
         retriever=retriever,
@@ -50,17 +50,8 @@ def create_chain(retriever):
     return conversation_chain
 
 
-text_chunks = None
-retriever = None
-chain = None
-
-
-async def load_chain():
-    global chain
-    chain = create_chain(retriever)
-
-
 async def process_pdf(docs):
-    global text_chunks, retriever
     text_chunks = get_text_chunks(docs)
     retriever = get_vectorstore(text_chunks)
+    conversation_chain = create_chain(retriever)
+    return conversation_chain
