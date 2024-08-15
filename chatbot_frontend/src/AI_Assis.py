@@ -15,7 +15,6 @@ from response_process import extract_code_from_response
 def show_chatbot_page():
     dotenv.load_dotenv()
     CHATBOT_URL = os.getenv("CHATBOT_URL", "http://localhost:8000")
-    FILE_STORAGE_DIR = os.getenv("FILES_STORAGE_DIR")
     YOUR_FULL_PATH = os.getenv("FULL_PATH_DIR")
     if not os.path.exists(YOUR_FULL_PATH):
         os.mkdir(YOUR_FULL_PATH)
